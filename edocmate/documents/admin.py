@@ -1,10 +1,15 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Document
+from .models import Document, Tag
 
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'file_preview', 'date_created', 'date_modified')
+    list_display = ('name', 'file_preview', 'tags_list', 'date_created', 'date_modified')
+    readonly_fields = ('file_preview',)
 
+    def tags_list(self, obj):
+        return ', '.join(tag.name for tag in obj.tags.all())
+
+    tags_list.short_description = 'Tags'
     def file_preview(self, obj):
         if obj.file:
             if obj.file.name.endswith('.pdf'):
@@ -17,4 +22,6 @@ class DocumentAdmin(admin.ModelAdmin):
     file_preview.short_description = 'File Preview'
 
 
+
 admin.site.register(Document, DocumentAdmin)
+admin.site.register(Tag)

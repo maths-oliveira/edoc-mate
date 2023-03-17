@@ -1,13 +1,11 @@
-import os
-from django.conf import settings
-from django.contrib import admin
-from django.core.files.base import ContentFile
 from django.utils.html import format_html
-from pdf2image import convert_from_path
-import PyPDF2
-import pytesseract
-import io
 from .models import Document, Tag
+from django.contrib import admin
+from .models import Document
+from pdf2image import convert_from_bytes
+import io
+import pytesseract
+import PyPDF2
 
 class DocumentAdmin(admin.ModelAdmin):
     list_display = ('name', 'file_preview', 'tags_list', 'date_created', 'date_modified')
@@ -29,22 +27,24 @@ class DocumentAdmin(admin.ModelAdmin):
     file_preview.short_description = 'File Preview'
 
     def save_model(self, request, obj, form, change):
-        # Call the parent save_model method to save the original file
-        super().save_model(request, obj, form, change)
+        # process the pdf file only if it's a new upload
+        if not change:
+            # get the uploaded file
+            uploaded_file = form.cleaned_data['file']
 
-        if obj.file.name.endswith('.pdf'):
-            images = convert_from_path(obj.file.path)
-            searchable_pdf = io.BytesIO()
+            # convert the pdf file to searchable pdf
+            images = convert_from_bytes(uploaded_file.read())
             pdf_writer = PyPDF2.PdfWriter()
             for image in images:
                 page = pytesseract.image_to_pdf_or_hocr(image, extension='pdf')
-                pdf = PyPDF2.PdfReader(io.BytesIO(page))
-                pdf_writer.add_page(pdf.pages[0])
-            pdf_writer.write(searchable_pdf)
-            searchable_pdf.seek(0)
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(page))
+                pdf_writer.add_page(pdf_reader.pages[0])
+            # save the searchable pdf to the pdf_file field
+            output_file = io.BytesIO()
+            pdf_writer.write(output_file)
 
-            obj.file.save(obj.file.name, ContentFile(searchable_pdf.read()), save=True)
-
+            obj.file.save(uploaded_file.name, output_file)
+        super().save_model(request, obj, form, change)
 
 admin.site.register(Document, DocumentAdmin)
 admin.site.register(Tag)

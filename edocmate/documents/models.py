@@ -1,4 +1,10 @@
 from django.db import models
+import io
+from pdf2image import convert_from_bytes
+import pytesseract
+from PyPDF2 import PdfFileWriter, PdfFileReader
+from django.db import models
+from django.core.files.base import ContentFile
 
 
 class Tag(models.Model):

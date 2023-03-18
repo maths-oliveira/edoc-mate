@@ -1,25 +1,34 @@
 from django.db import models
-import io
-from pdf2image import convert_from_bytes
-import pytesseract
-from PyPDF2 import PdfFileWriter, PdfFileReader
-from django.db import models
-from django.core.files.base import ContentFile
-
-
-class Tag(models.Model):
-    name = models.CharField(max_length=50, unique=True)
-
-    def __str__(self):
-        return self.name
 
 
 class Document(models.Model):
     name = models.CharField(max_length=255)
     file = models.FileField(upload_to='uploads/')
-    tags = models.ManyToManyField(Tag, related_name='documents')
+    labels = models.ManyToManyField('Label', through='DocumentLabel')
     date_created = models.DateTimeField(auto_now_add=True)
     date_modified = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+
+
+class Label(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return f"{self.name}"
+
+class DocumentLabel(models.Model):
+    document = models.ForeignKey(Document, on_delete=models.CASCADE)
+    label = models.ForeignKey(Label, on_delete=models.CASCADE)
+    value = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.label} - {self.value}"
+
+
+class Dossier(models.Model):
+    name = models.CharField(max_length=100)
+    documents = models.ManyToManyField(Document, related_name='dossiers')
+    def __str__(self):
+        return f"{self.name}"

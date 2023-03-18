@@ -1,20 +1,22 @@
 from django.utils.html import format_html
-from .models import Document, Tag
+from .models import Document, DocumentLabel, Label, Dossier
 from django.contrib import admin
-from .models import Document
 from pdf2image import convert_from_bytes
 import io
 import pytesseract
 import PyPDF2
 
+class LabelInline(admin.TabularInline):
+    model = Document.labels.through
+
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'file_preview', 'tags_list', 'date_created', 'date_modified')
+    list_display = ('name', 'get_label', 'file_preview', 'date_created', 'date_modified')
     readonly_fields = ('file_preview',)
+    inlines = [LabelInline]
+    def get_label(self, obj):
+        rels = obj.documentlabel_set.all()
+        return ", ".join([f"{rel.label.name}: {rel.value}" for rel in rels])
 
-    def tags_list(self, obj):
-        return ', '.join(tag.name for tag in obj.tags.all())
-
-    tags_list.short_description = 'Tags'
     def file_preview(self, obj):
         if obj.file:
             if obj.file.name.endswith('.pdf'):
@@ -46,5 +48,9 @@ class DocumentAdmin(admin.ModelAdmin):
             obj.file.save(uploaded_file.name, output_file)
         super().save_model(request, obj, form, change)
 
+class DocumentLabelAdmin(admin.ModelAdmin):
+    model = DocumentLabel
+
 admin.site.register(Document, DocumentAdmin)
-admin.site.register(Tag)
+admin.site.register(Label)
+admin.site.register(Dossier)

@@ -2,11 +2,12 @@ from django.utils.html import format_html
 from .models import Document, DocumentLabel, Label, Dossier
 from django.contrib import admin
 from pdf2image import convert_from_bytes
-import io
 import pytesseract
 import PyPDF2
 from PIL import Image
-
+import io
+from django.http import HttpResponse
+from PyPDF2 import PdfWriter, PdfReader
 
 class LabelInline(admin.TabularInline):
     model = Document.labels.through
@@ -56,6 +57,40 @@ class DocumentAdmin(admin.ModelAdmin):
 class DocumentLabelAdmin(admin.ModelAdmin):
     model = DocumentLabel
 
+
+
+
+def download_dossier_pdf(modeladmin, request, queryset):
+    # create a new PDF file
+    pdf_writer = PdfWriter()
+
+    # loop through all the documents in the selected dossiers
+    for dossier in queryset:
+        documents = Document.objects.filter(dossiers=dossier)
+        for document in documents:
+            # add the document file to the PDF file
+            pdf_reader = PdfReader(document.file)
+            for page in range(len(pdf_reader.pages)):
+                pdf_writer.add_page(pdf_reader.pages[page])
+
+    output_buffer = io.BytesIO()
+    pdf_writer.write(output_buffer)
+
+    # create a response object with the PDF file as the content
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="dossier.pdf"'
+    response.write(output_buffer.getvalue())
+
+    return response
+
+download_dossier_pdf.short_description = 'Download selected dossiers as PDF'
+
+
+class DossierAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    actions = [download_dossier_pdf]
+
+admin.site.register(Dossier, DossierAdmin)
+
 admin.site.register(Document, DocumentAdmin)
 admin.site.register(Label)
-admin.site.register(Dossier)

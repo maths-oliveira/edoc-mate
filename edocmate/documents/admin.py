@@ -1,36 +1,25 @@
-import numpy as np
 from django.utils.html import format_html
-from .models import Document, DocumentLabel, Label, Dossier
+from .models import Document, Dossier, Person, Category, TType, Other
 from django.contrib import admin
-from pdf2image import convert_from_bytes
-import chardet
 import pytesseract
-import sys, fitz
-from pypdf import PdfReader
-
 import PyPDF2
+import pypdfium2 as pdfium
+from django.db.models import Q
 from PIL import Image
 import io
 from django.http import HttpResponse
 from PyPDF2 import PdfWriter
 from pypdf import PdfReader
+from django.contrib import admin
 
-from wand.image import Image as WandImage
-import codecs
-import chardet
-
-class LabelInline(admin.TabularInline):
-    model = Document.labels.through
+from .models import Document
 
 
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ('name', 'get_label', 'file_preview', 'date_created', 'date_modified')
+    list_display = ('file_preview', 'name', 'person', 'category', 'ttype', 'other')
     readonly_fields = ('file_preview',)
-    inlines = [LabelInline]
-
-    def get_label(self, obj):
-        rels = obj.documentlabel_set.all()
-        return ", ".join([f"{rel.label.name}: {rel.value}" for rel in rels])
+    list_filter = ('person', 'category', 'ttype')
+    search_fields = ['name', 'person__name__icontains', 'category__name__icontains', 'ttype__name__icontains', 'other__name__icontains']
 
     def file_preview(self, obj):
         if obj.file:
@@ -48,25 +37,19 @@ class DocumentAdmin(admin.ModelAdmin):
 
         images = []
         if uploaded_file.name.endswith('.pdf'):
-            import pypdfium2 as pdfium
             pdf = pdfium.PdfDocument(uploaded_file.read())
             pdf.init_forms()
 
             for page in pdf:
-                bitmap = page.render(
-                    scale=5,
-                    rotation=0,
-                    draw_annots=True
-                )
+                bitmap = page.render(scale=5, rotation=0, draw_annots=True)
                 pil_image = bitmap.to_pil()
                 images.append(pil_image)
         else:
             images = [Image.open(uploaded_file)]
 
-        # convert the pdf file to searchable pdf
         pdf_writer = PyPDF2.PdfWriter()
         for image in images:
-            config = "--oem 1 --psm 6 -l eng+fra"
+            config = "--oem 1 --psm 6 -l eng+fra+por"
             page = pytesseract.image_to_pdf_or_hocr(image, extension='pdf', config=config)
             pdf_reader = PyPDF2.PdfReader(io.BytesIO(page))
             pdf_writer.add_page(pdf_reader.pages[0])
@@ -76,9 +59,21 @@ class DocumentAdmin(admin.ModelAdmin):
         obj.file.save('.'.join(uploaded_file.name.split('.')[:-1]) + '.pdf', output_file)
         super().save_model(request, obj, form, change)
 
+    def get_person(self, obj):
+        return obj.person.name if obj.person else '-'
+    get_person.short_description = 'Person'
 
-class DocumentLabelAdmin(admin.ModelAdmin):
-    model = DocumentLabel
+    def get_category(self, obj):
+        return obj.category.name if obj.category else '-'
+    get_category.short_description = 'Category'
+
+    def get_type(self, obj):
+        return obj.ttype.name if obj.ttype else '-'
+    get_type.short_description = 'Type'
+
+    def get_other(self, obj):
+        return obj.other.name if obj.other else '-'
+    get_type.short_description = 'Other'
 
 
 def download_dossier_pdf(modeladmin, request, queryset):
@@ -111,4 +106,7 @@ class DossierAdmin(admin.ModelAdmin):
 
 admin.site.register(Dossier, DossierAdmin)
 admin.site.register(Document, DocumentAdmin)
-admin.site.register(Label)
+admin.site.register(Person)
+admin.site.register(Category)
+admin.site.register(TType)
+admin.site.register(Other)

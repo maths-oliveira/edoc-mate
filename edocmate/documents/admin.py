@@ -1,18 +1,24 @@
 from django.utils.html import format_html
 from .models import Document, Dossier, Person, Category, TType, Other
-from django.contrib import admin
 import pytesseract
 import PyPDF2
 import pypdfium2 as pdfium
-from django.db.models import Q
 from PIL import Image
 import io
 from django.http import HttpResponse
 from PyPDF2 import PdfWriter
 from pypdf import PdfReader
 from django.contrib import admin
-
+from django import forms
 from .models import Document
+
+class DocumentAdminForm(forms.ModelForm):
+    class Meta:
+        model = Document
+        fields = '__all__'
+
+    file = forms.FileField(widget=forms.ClearableFileInput(attrs={'multiple': True}))
+
 
 
 class DocumentAdmin(admin.ModelAdmin):
@@ -20,6 +26,8 @@ class DocumentAdmin(admin.ModelAdmin):
     readonly_fields = ('file_preview',)
     list_filter = ('person', 'category', 'ttype')
     search_fields = ['name', 'person__name__icontains', 'category__name__icontains', 'ttype__name__icontains', 'other__name__icontains']
+
+    form = DocumentAdminForm
 
     def file_preview(self, obj):
         if obj.file:
@@ -33,26 +41,28 @@ class DocumentAdmin(admin.ModelAdmin):
     file_preview.short_description = 'File Preview'
 
     def save_model(self, request, obj, form, change):
-        uploaded_file = form.cleaned_data['file']
-
-        images = []
-        if uploaded_file.name.endswith('.pdf'):
-            pdf = pdfium.PdfDocument(uploaded_file.read())
-            pdf.init_forms()
-
-            for page in pdf:
-                bitmap = page.render(scale=5, rotation=0, draw_annots=True)
-                pil_image = bitmap.to_pil()
-                images.append(pil_image)
-        else:
-            images = [Image.open(uploaded_file)]
+        uploaded_files = request.FILES.getlist('file')
 
         pdf_writer = PyPDF2.PdfWriter()
-        for image in images:
-            config = "--oem 1 --psm 6 -l eng+fra+por"
-            page = pytesseract.image_to_pdf_or_hocr(image, extension='pdf', config=config)
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(page))
-            pdf_writer.add_page(pdf_reader.pages[0])
+        for uploaded_file in uploaded_files:
+
+            images = []
+            if uploaded_file.name.endswith('.pdf'):
+                pdf = pdfium.PdfDocument(uploaded_file.read())
+                pdf.init_forms()
+
+                for page in pdf:
+                    bitmap = page.render(scale=5, rotation=0, draw_annots=True)
+                    pil_image = bitmap.to_pil()
+                    images.append(pil_image)
+            else:
+                images = [Image.open(uploaded_file)]
+
+            for image in images:
+                config = "--oem 1 --psm 6 -l eng+fra+por"
+                page = pytesseract.image_to_pdf_or_hocr(image, extension='pdf', config=config)
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(page))
+                pdf_writer.add_page(pdf_reader.pages[0])
         output_file = io.BytesIO()
         pdf_writer.write(output_file)
 
